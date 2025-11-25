@@ -1,7 +1,16 @@
+import withPwa from 'next-pwa';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
-  reactCompiler: true,
+  turbopack: {
+  }
 };
 
-export default nextConfig;
+const pwaConfig = {
+  dest: 'public',
+  register: true,
+  skipWaiting: true,  
+};
+
+const withPwaConfig = withPwa(nextConfig, pwaConfig);
+
+export default withPwaConfig;
