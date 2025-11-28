@@ -66,21 +66,23 @@ export default function HomePageContent() {
             <div className="flex flex-col space-y-3 sm:flex-row sm:justify-center sm:space-y-0 sm:space-x-4">
                 
                 {/* Buton principal (Dashboard sau Login/Resurse) */}
-                {(role === 'admin' || role === 'lider') ? (
-                    <Link 
-                        href="/dashboard"
-                        className="w-full sm:w-auto inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg transform hover:scale-[1.02]"
-                    >
+                {
+                    (role === 'admin' || role === 'lider') && 
+                        <>
+                        <Link
+                            href="/dashboard"
+                            className="w-full sm:w-auto inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg transform hover:scale-[1.02]"
+                        >
                         Accesează Dashboard-ul
-                    </Link>
-                ) : (
-                    <Link 
-                        href="/calendar"
-                        className="w-full sm:w-auto inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-md transform hover:scale-[1.02]"
-                    >
-                        Vezi Calendarul
-                    </Link>
-                )}
+                        </Link>
+                        <Link
+                            href="/events"
+                            className="w-full sm:w-auto inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-md transform hover:scale-[1.02]"
+                        >
+                            Vezi Calendarul
+                        </Link>
+                        </>
+                }
                 
             </div>
         </div>
