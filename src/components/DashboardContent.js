@@ -94,7 +94,10 @@ export default function DashboardContent() {
                 throw new Error(data.message || 'Eroare la setarea rolului.');
             }
             
-            setStatusMessage({ type: 'success', text: `Rolul setat cu succes: ${data.message}` });
+            setStatusMessage({ 
+                type: 'success', 
+                text: `Rolul setat cu succes: ${data.message}. Utilizatorul va vedea noul rol când reîmprospătează aplicația sau la următoarea autentificare.` 
+            });
 
             // Reîmprospătează lista pentru a vedea noua stare
             setTimeout(() => {
