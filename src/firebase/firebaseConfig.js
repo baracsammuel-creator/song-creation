@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
 // Am adăugat 'updateDoc' și 'deleteDoc' în importul din 'firebase/firestore'
 import { getFirestore, collection, doc, query, where, getDocs, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 

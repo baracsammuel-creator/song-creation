@@ -2,20 +2,25 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { 
+    onAuthStateChanged, 
+    signInAnonymously,
+    signOut
+} from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+// AVERTISMENT DE SECURITATE: Această parolă este aceeași pentru toți utilizatorii.
+// A se folosi DOAR pentru aplicații interne, unde securitatea conturilor individuale nu este o prioritate.
+
 export const AuthContextProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [role, setRole] = useState('adolescent'); 
     const [loading, setLoading] = useState(true);
-    
-    // Folosim useRef pentru a preveni rularea multiplă a logicii de inițializare
-    const isInitializing = useRef(false);
+    const isInitializing = useRef(false); // Previne rulări multiple
 
     // Funcție pentru a actualiza rolul din token claims
     const updateRoleFromToken = useCallback(async (currentUser) => {
@@ -23,46 +28,18 @@ export const AuthContextProvider = ({ children }) => {
             setRole('adolescent');
             return;
         }
-
         try {
-            // Forțăm reîmprospătarea token-ului pentru a obține cele mai noi claims
             const token = await currentUser.getIdTokenResult(true);
             const claims = token.claims;
-            
-            const newRole = claims.admin ? 'admin' : claims.lider ? 'lider' : 'adolescent';
-            
+            // Rolul implicit este 'adolescent' dacă nu există altceva în claims
+            const newRole = claims.admin ? 'admin' : claims.lider ? 'lider' : (claims.role || 'adolescent');
             console.log('Role updated from token:', newRole);
             setRole(newRole);
         } catch (error) {
-            // AICI PRINDEM EROAREA DE REVOCARE
-            if (error.code === 'auth/id-token-revoked' || error.code === 'auth/user-token-expired') {
-                console.warn("Sesiunea a fost revocată. Se încearcă re-autentificarea...");
-                
-                const storedUid = localStorage.getItem('anonymousUid');
-                if (storedUid) {
-                    try {
-                        // Cerem un token nou de la server pentru UID-ul nostru
-                        const response = await fetch('/api/reauth', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ uid: storedUid }),
-                        });
-                        const data = await response.json();
-
-                        if (data.success) {
-                            // Ne re-autentificăm cu token-ul custom
-                            await signInWithCustomToken(auth, data.token);
-                            console.log("Re-autentificare reușită cu același UID:", storedUid);
-                            // onAuthStateChanged se va declanșa din nou cu noul utilizator valid
-                        } else {
-                            throw new Error(data.message || 'Eroare la server reauth');
-                        }
-                    } catch (reauthError) {
-                        console.error("Re-autentificarea a eșuat, se curăță starea:", reauthError);
-                        localStorage.removeItem('anonymousUid');
-                        await auth.signOut(); // Forțează delogarea completă
-                    }
-                }
+            if (error.code === 'auth/id-token-revoked') {
+                console.warn("Sesiunea a fost revocată. Se va încerca re-autentificarea la reîncărcare.");
+                // Forțăm delogarea pentru a declanșa logica de re-autentificare din useEffect
+                await signOut(auth);
             } else {
                 console.error('Error updating role from token:', error);
                 setRole('adolescent');
@@ -70,63 +47,58 @@ export const AuthContextProvider = ({ children }) => {
         }
     }, []);
 
-    // Funcție pentru a forța refresh-ul rolului (poate fi apelată manual)
     const refreshRole = useCallback(async () => {
         if (auth.currentUser) {
             await updateRoleFromToken(auth.currentUser);
         }
     }, [updateRoleFromToken]);
 
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            setLoading(true);
             if (currentUser) {
+                // Utilizator logat, salvăm UID-ul
+                localStorage.setItem('persistentUid', currentUser.uid);
                 setUser(currentUser);
-                // Salvăm UID-ul pentru a-l putea folosi la re-autentificare
-                localStorage.setItem('anonymousUid', currentUser.uid);
                 await updateRoleFromToken(currentUser);
-                setLoading(false);
                 isInitializing.current = false;
             } else {
-                // Dacă nu există utilizator și nu suntem deja în proces de inițializare
+                // Niciun utilizator activ. Aici intervine logica de persistență.
                 if (!isInitializing.current) {
                     isInitializing.current = true;
-                    console.log("Niciun utilizator. Se inițiază autentificarea anonimă...");
+                    console.log("Niciun utilizator activ. Se inițiază autentificarea anonimă...");
                     try {
                         await signInAnonymously(auth);
-                        // onAuthStateChanged se va rula din nou, de data asta cu un utilizator
+                        // onAuthStateChanged se va rula din nou, de data asta cu un utilizator,
+                        // și va intra pe ramura `if (currentUser)` de mai sus.
                     } catch (error) {
                         console.error("Eroare la signInAnonymously:", error);
-                        setLoading(false);
                         isInitializing.current = false;
                     }
                 }
             }
+            setLoading(false);
         });
 
-        // Verifică periodic pentru actualizări de rol (la fiecare 5 minute)
-        const roleRefreshInterval = setInterval(async () => {
-            if (auth.currentUser) {
-                console.log('Periodic role check...');
-                await updateRoleFromToken(auth.currentUser);
-            }
-        }, 5 * 60 * 1000); // 5 minute
-
-        // Listener pentru când aplicația devine vizibilă din nou (user revine la aplicație)
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible' && auth.currentUser) {
                 console.log('App became visible, refreshing role...');
-                await updateRoleFromToken(auth.currentUser);
+                await refreshRole();
             }
         };
-
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             unsubscribe();
-            clearInterval(roleRefreshInterval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [updateRoleFromToken]);
+    }, [updateRoleFromToken, refreshRole]);
+
+    // Afișează un ecran de încărcare global
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen bg-gray-100 text-theme-primary">Se încarcă...</div>;
+    }
 
     return (
         <AuthContext.Provider value={{ user, loading, role, refreshRole }}> 
