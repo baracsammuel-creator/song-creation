@@ -18,7 +18,8 @@ export const useAuth = () => useContext(AuthContext);
 
 // AVERTISMENT DE SECURITATE: Această parolă este aceeași pentru toți utilizatorii.
 // A se folosi DOAR pentru aplicații interne, unde securitatea conturilor nu este o prioritate.
-const GENERIC_PASSWORD = "connect-12345";
+// Recomandare: Mutați parola într-un fișier .env.local
+const GENERIC_PASSWORD = process.env.NEXT_PUBLIC_GENERIC_PASSWORD || "connect-12345";
 
 export const AuthContextProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -116,19 +117,12 @@ export const AuthContextProvider = ({ children }) => {
         };
     }, [updateRoleFromToken, refreshRole]); // Am scos loginWithName de aici
 
-    // Afișează un ecran de încărcare global
-    if (loading) {
-        return <div className="flex items-center justify-center min-h-screen bg-gray-100 text-theme-primary">Se încarcă...</div>;
-    }
-
-    // Dacă nu e loading și nu există user, afișează pagina de Login
-    if (!user) {
-        // Furnizăm funcția de login componentei Login
-        return <AuthContext.Provider value={{ user, loading, role, loginWithName, refreshRole }}><Login /></AuthContext.Provider>;
-    }
+    // Provider-ul acum doar furnizează contextul.
+    // Logica de afișare (loading, pagină de login, conținut protejat)
+    // ar trebui gestionată în afara provider-ului, de ex. într-un layout component.
 
     return (
-        <AuthContext.Provider value={{ user, loading, role, loginWithName, refreshRole }}> 
+        <AuthContext.Provider value={{ user, loading, role, loginWithName, refreshRole }}>
             {children}
         </AuthContext.Provider>
     );
