@@ -7,7 +7,8 @@ const withPWA = require('next-pwa')({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Aici poți adăuga alte configurații Next.js dacă ai nevoie
+  // Asigură-te că NU ai linia "output: 'export'" aici.
+  // Poți adăuga alte configurații Next.js dacă ai nevoie
   // reactStrictMode: true,
 };
 
