@@ -74,39 +74,34 @@ export const eventsCollectionRef = dbInitialized ? collection(db, getEventsColle
  * @returns {Promise<string>} Promisiune care rezolvă cu ID-ul utilizatorului autentificat.
  */
 export const initializeAuth = async () => {
-    if (!dbInitialized) {
-        console.warn("Autentificarea a fost omisă deoarece configurarea Firebase lipsește.");
-        return null;
-    }
+  if (!dbInitialized) {
+    console.warn("Autentificarea a fost omisă deoarece configurarea Firebase lipsește.");
+    return Promise.resolve(null);
+  }
 
-    try {
-        // Verificăm dacă există deja un utilizator autentificat (sesiune persistată)
-        if (auth.currentUser) {
-            console.log("Utilizator existent găsit din sesiune persistată:", auth.currentUser.uid);
-            return auth.currentUser.uid;
-        }
+  return new Promise((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      unsubscribe(); // Ne dezabonăm imediat pentru a rula o singură dată la inițializare
 
-        // Dacă nu există utilizator, autentificăm
-        if (initialAuthToken) {
+      if (user) {
+        console.log("Utilizator existent găsit din sesiune persistată:", user.uid);
+        resolve(user.uid);
+      } else {
+        try {
+          if (initialAuthToken) {
             await signInWithCustomToken(auth, initialAuthToken);
-        } else {
-            // Dacă token-ul nu este disponibil, ne autentificăm anonim
+          } else {
             await signInAnonymously(auth);
+          }
+          console.log("Autentificare nouă reușită. User ID:", auth.currentUser.uid);
+          resolve(auth.currentUser.uid);
+        } catch (error) {
+          console.error("Eroare la inițializarea autentificării Firebase:", error);
+          reject(error);
         }
-
-        const user = auth.currentUser;
-        if (user) {
-            console.log("Autentificare reușită. User ID:", user.uid);
-            return user.uid;
-        } else {
-            console.error("Autentificare eșuată: Nu s-a obținut utilizatorul.");
-            return null;
-        }
-    } catch (error) {
-        console.error("Eroare la inițializarea autentificării Firebase:", error);
-        // În caz de eșec, ne asigurăm că avem totuși un userId (anonim sau generat)
-        return auth?.currentUser?.uid || crypto.randomUUID();
-    }
+      }
+    }, reject); // Adăugăm un handler pentru erori la onAuthStateChanged
+  });
 };
 
 /**
