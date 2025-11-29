@@ -106,9 +106,10 @@ export const onAuthChange = (callback) => {
 /**
  * Adaugă un nou eveniment în Firestore.
  * @param {object} eventData Datele evenimentului (nume, dată, descriere etc.)
+ * @param {string} userRole Rolul utilizatorului care creează evenimentul.
  * @returns {Promise<import('firebase/firestore').DocumentReference>} Referința către documentul nou creat.
  */
-export const addEvent = (eventData) => {
+export const addEvent = (eventData, userRole) => {
     if (!dbInitialized || !eventsCollectionRef) {
         console.error("Eroare: Nu se poate adăuga evenimentul. Firestore nu este inițializat.");
         return Promise.reject(new Error("Firestore nu este inițializat."));
@@ -122,6 +123,7 @@ export const addEvent = (eventData) => {
         createdBy: userId,
         date: eventData.date || new Date().toISOString().split('T')[0], // Asigură-te că data e prezentă
     };
+    if (userRole) newEventData.role = userRole; // Adăugăm rolul dacă este furnizat
     
     return addDoc(eventsCollectionRef, newEventData);
 };
@@ -172,4 +174,4 @@ export const deleteEvent = (eventId) => {
 
 // Exportăm instanțele de bază pentru utilizare în alte părți ale aplicației
 // Am adăugat 'updateEvent' și 'deleteEvent' la export pentru a fi disponibile global
-export { app, db, auth, onSnapshot, collection, query, dbInitialized };
+export { app, db, auth, onSnapshot, collection, query, dbInitialized, where, getDocs, setDoc, doc, addDoc, updateDoc };

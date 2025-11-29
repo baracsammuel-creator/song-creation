@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
     format, 
     startOfMonth, 
@@ -17,172 +17,23 @@ import {
 } from 'date-fns';
 import { ro } from 'date-fns/locale'; 
 
-import { 
+// Importăm noile componente modale
+import EventFormModal from './EventFormModal';
+import EventDetailModal from './EventDetailModal';
+
+import {
     onSnapshot, 
     query, 
     eventsCollectionRef, 
     addEvent, 
     updateEvent, 
     deleteEvent, 
-    dbInitialized 
+    dbInitialized,
+    getEventsCollectionPath,
+    collection,
+    db
 } from '@/firebase/firebaseConfig';
 import { useAuth } from '@/context/AuthContext'; 
-
-// --- Componenta Modală pentru Formularul de Eveniment (Editare/Creare) ---
-const EventFormModal = ({ selectedDate, eventToEdit, onClose, onSave, onDelete, currentUserId }) => {
-    const isEditing = !!eventToEdit;
-    
-    const [title, setTitle] = useState(eventToEdit?.title || '');
-    const [description, setDescription] = useState(eventToEdit?.description || '');
-    const [eventTime, setEventTime] = useState(eventToEdit?.time || format(new Date(), 'HH:mm')); 
-    const [error, setError] = useState('');
-    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-
-    // Data afișată în modal
-    const displayDate = isEditing 
-        ? parseISO(eventToEdit.date).toLocaleDateString('ro-RO')
-        : selectedDate.toLocaleDateString('ro-RO');
-
-    // Verifică dacă utilizatorul curent este creatorul evenimentului de editat
-    const canDelete = isEditing && (eventToEdit.createdBy === currentUserId || eventToEdit.role === 'admin' || eventToEdit.role === 'lider');
-
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        if (!title.trim()) {
-            setError("Titlul evenimentului nu poate fi gol.");
-            return;
-        }
-        if (!eventTime) {
-            setError("Vă rugăm să selectați o oră.");
-            return;
-        }
-
-        const data = {
-            title,
-            description,
-            date: eventToEdit?.date || format(selectedDate, 'yyyy-MM-dd'), 
-            time: eventTime, 
-        };
-
-        try {
-            if (isEditing) {
-                // Dacă e editare, trimitem ID-ul și datele
-                await onSave(eventToEdit.id, data);
-            } else {
-                // Dacă e creare, trimitem doar datele
-                await onSave(data);
-            }
-            onClose();
-        } catch (err) {
-            console.error(`Eroare la ${isEditing ? 'actualizarea' : 'adăugarea'} evenimentului:`, err);
-            // Afișăm eroarea primită de la Firestore pentru a ajuta la depanare
-            setError(`A apărut o eroare la salvare: ${err.message}. Încercați din nou. Dacă eroarea persistă, verificați Regulile de Securitate Firestore.`);
-        }
-    };
-    
-    // Funcție pentru ștergere cu confirmare
-    const handleDelete = async () => {
-        if (!isConfirmingDelete) {
-            setIsConfirmingDelete(true);
-            return;
-        }
-        
-        try {
-            if (eventToEdit?.id) {
-                await onDelete(eventToEdit.id);
-                onClose();
-            }
-        } catch (err) {
-            console.error("Eroare la ștergerea evenimentului:", err);
-            setError(`A apărut o eroare la ștergere: ${err.message}.`);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
-                
-                {/* Butonul de Închidere (X) în colțul din dreapta sus */}
-                <button
-                    onClick={onClose}
-                    className="absolute top-3 right-3 p-2 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition focus:outline-none"
-                    aria-label="Închide"
-                >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-                
-                <h2 className="text-2xl font-bold mb-4 text-indigo-600">
-                    {isEditing ? 'Modifică Eveniment' : 'Creare Eveniment Nou'}
-                </h2>
-                <p className="mb-4 text-gray-700">Data evenimentului: <span className="font-semibold">{displayDate}</span></p>
-
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Titlu</label>
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
-                            required
-                        />
-                    </div>
-                    
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Oră</label>
-                        <input
-                            type="time"
-                            value={eventTime}
-                            onChange={(e) => setEventTime(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
-                            required
-                        />
-                    </div>
-
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Descriere (Opțional)</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            rows="3"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
-                        />
-                    </div>
-
-                    {error && <p className="text-red-500 text-sm mb-4 p-2 bg-red-50 rounded-md border border-red-200">{error}</p>}
-
-                    <div className="flex justify-between items-center mt-6">
-                        {/* Se afișează butonul de ștergere doar dacă utilizatorul poate șterge */}
-                        {isEditing && canDelete && (
-                            <button
-                                type="button"
-                                onClick={handleDelete}
-                                className={`px-4 py-2 text-sm font-medium rounded-lg transition shadow-md ${
-                                    isConfirmingDelete 
-                                    ? 'bg-red-600 text-white hover:bg-red-700' 
-                                    : 'bg-red-100 text-red-600 hover:bg-red-200'
-                                }`}
-                            >
-                                {isConfirmingDelete ? 'CONFIRMĂ ȘTERGEREA?' : 'Șterge Eveniment'}
-                            </button>
-                        )}
-                        <div className={`flex space-x-3 ${!isEditing || !canDelete ? 'w-full justify-end' : 'ml-auto'}`}>
-                            {/* Butonul de ANULARE este ELIMINAT, se folosește 'X'-ul de închidere */}
-                            <button
-                                type="submit"
-                                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition shadow-md"
-                            >
-                                {isEditing ? 'Salvează Modificările' : 'Salvează Eveniment'}
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
 
 // --- Componenta Principală Calendar ---
 
@@ -198,11 +49,19 @@ export default function Calendar() {
     
     // Stochează evenimentele sub formă { 'YYYY-MM-DD': [event1, event2] }
     const [events, setEvents] = useState({}); 
-    const [modalState, setModalState] = useState({
+    // NOU: Stare pentru a stoca numărul de participanți { eventId: count }
+    const [participantCounts, setParticipantCounts] = useState({});
+    const [editModalState, setEditModalState] = useState({
         isOpen: false,
         eventToEdit: null, // Null pentru creare, obiect eveniment pentru editare
         selectedDateForNew: null, // Data pentru un eveniment nou
     });
+    // NOU: Stare separată pentru modala de detalii/RSVP
+    const [detailModalState, setDetailModalState] = useState({
+        isOpen: false,
+        event: null,
+    });
+
     const [isFetching, setIsFetching] = useState(true);
 
     // NOU: Calculăm dacă ziua selectată este în trecut
@@ -253,8 +112,14 @@ export default function Calendar() {
 
         const eventsQuery = query(eventsCollectionRef);
 
+        // 1. Declarăm activeListeners în scope-ul useEffect
+        let activeListeners = {};
+
         const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
             const fetchedEvents = {};
+            // 2. Curățăm listenerii vechi pentru a nu avea scurgeri de memorie
+            Object.values(activeListeners).forEach(unsub => unsub());
+            activeListeners = {}; // Resetăm obiectul
             snapshot.forEach(doc => {
                 const event = doc.data();
                 const dateKey = event.date; // Format YYYY-MM-DD
@@ -264,6 +129,20 @@ export default function Calendar() {
                 }
                 // Adăugăm evenimentul, inclusiv câmpul 'time' și 'createdBy'
                 fetchedEvents[dateKey].push({ id: doc.id, ...event });
+
+                // NOU: Ascultăm numărul de participanți pentru fiecare eveniment
+                const rsvpsPath = `${getEventsCollectionPath()}/${doc.id}/rsvps`;
+                const rsvpsCollectionRef = collection(db, rsvpsPath);
+                
+                // Creăm un listener pentru sub-colecția de RSVP-uri
+                activeListeners[doc.id] = onSnapshot(rsvpsCollectionRef, (rsvpSnapshot) => {
+                    // Actualizăm starea cu numărul de documente (participanți)
+                    setParticipantCounts(prevCounts => ({
+                        ...prevCounts,
+                        [doc.id]: rsvpSnapshot.size,
+                    }));
+                });
+
             });
             
             // Sortăm evenimentele în fiecare zi după oră
@@ -279,7 +158,11 @@ export default function Calendar() {
             setIsFetching(false);
         });
 
-        return () => unsubscribe();
+        // 3. Funcția de curățare are acum acces la activeListeners
+        return () => {
+            unsubscribe();
+            Object.values(activeListeners).forEach(unsub => unsub());
+        };
     }, [loading, user]); // Dependență adăugată pentru 'user'
 
     // Setează ziua selectată și actualizează luna afișată la luna zilei selectate
@@ -328,7 +211,7 @@ export default function Calendar() {
             return;
         }
         
-        setModalState({
+        setEditModalState({
             isOpen: true,
             eventToEdit: null,
             selectedDateForNew: selectedDate,
@@ -341,31 +224,42 @@ export default function Calendar() {
             console.error("Acces neautorizat. Nu aveți permisiunea de a edita acest eveniment.");
             return;
         }
-        setModalState({
+        setEditModalState({
             isOpen: true,
             eventToEdit: event,
             selectedDateForNew: null,
         });
     }
 
-    const handleCloseModal = () => {
-        setModalState({
+    // NOU: Funcții pentru a gestiona modala de detalii
+    const handleOpenDetailModal = (event) => {
+        setDetailModalState({ isOpen: true, event: event });
+    };
+
+    const handleCloseDetailModal = () => {
+        setDetailModalState({ isOpen: false, event: null });
+    };
+
+    const handleCloseEditModal = () => {
+        setEditModalState({
             isOpen: false,
             eventToEdit: null,
             selectedDateForNew: null,
         });
     }
 
+
     // Funcție pentru Creare/Salvare
     const handleSaveEvent = async (idOrData, dataIfUpdate) => {
         try {
-            if (modalState.eventToEdit) {
+            // Verificăm starea modalului de editare
+            if (editModalState.eventToEdit) {
                 // Mod de editare
                 await updateEvent(idOrData, dataIfUpdate);
                 console.log("Eveniment actualizat cu succes!");
             } else {
                 // Mod de creare
-                await addEvent(idOrData);
+                await addEvent(idOrData, role); // Am adăugat 'role' ca al doilea parametru
                 console.log("Eveniment salvat cu succes!");
             }
         } catch (error) {
@@ -535,20 +429,30 @@ export default function Calendar() {
                             {eventsForSelectedDay.map((event) => (
                                 <li 
                                     key={event.id}
-                                    className="p-3 sm:p-4 bg-indigo-50 border-l-4 border-indigo-600 rounded-lg shadow-sm hover:shadow-md transition duration-200 flex justify-between items-start"
+                                    // Am adăugat cursor-pointer pentru a indica interactivitatea
+                                    className="p-3 sm:p-4 bg-indigo-50 border-l-4 border-indigo-600 rounded-lg shadow-sm hover:shadow-md transition duration-200 flex justify-between items-start cursor-pointer"
+                                    onClick={() => handleOpenDetailModal(event)} // Deschide modala de detalii
                                 >
-                                    <div>
+                                    <div className="flex-grow">
                                         <p className="text-base sm:text-lg font-semibold text-indigo-800">
                                             {event.time && <span className="font-extrabold mr-2 text-indigo-700 bg-indigo-200 px-2 py-0.5 rounded-md text-sm">{event.time}</span>}
                                             {event.title}
                                         </p>
                                         {event.description && <p className="text-gray-600 mt-1 text-sm">{event.description}</p>}
                                     </div>
+                                    {/* NOU: Afișăm contorul de participanți */}
+                                    <div className="bottom-2 right-2 flex items-center bg-indigo-200 text-indigo-800 text-xs font-bold px-2 py-1 rounded-full">
+                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path></svg>
+                                        <span>{participantCounts[event.id] || 0}</span>
+                                    </div>
                                     {/* Afișăm butonul de editare doar dacă este autorizat */}
                                     {isAuthorizedToModify(event) && (
                                         <button
-                                            onClick={() => handleOpenEditEventModal(event)}
-                                            className="ml-4 p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-200/50 rounded-full hover:bg-indigo-200 transition"
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Previne deschiderea modalului de detalii
+                                                handleOpenEditEventModal(event);
+                                            }}
+                                            className="ml-4 p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-200/50 rounded-full hover:bg-indigo-200 transition relative z-10"
                                             title="Modifică evenimentul"
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
@@ -578,14 +482,24 @@ export default function Calendar() {
             )}
             
             {/* Modalul de Creare/Editare Eveniment */}
-            {modalState.isOpen && (
+            {editModalState.isOpen && (
                 <EventFormModal 
-                    selectedDate={modalState.selectedDateForNew}
-                    eventToEdit={modalState.eventToEdit}
-                    onClose={handleCloseModal}
+                    selectedDate={editModalState.selectedDateForNew}
+                    eventToEdit={editModalState.eventToEdit}
+                    onClose={handleCloseEditModal}
                     onSave={handleSaveEvent}
                     onDelete={handleDeleteEvent}
                     currentUserId={user?.uid} // Transmitem ID-ul utilizatorului curent
+                    role={role} // Transmitem și rolul pentru verificări
+                />
+            )}
+
+            {/* NOU: Modalul de Detalii/RSVP */}
+            {detailModalState.isOpen && (
+                <EventDetailModal
+                    event={detailModalState.event}
+                    onClose={handleCloseDetailModal}
+                    currentUser={user}
                 />
             )}
         </div>
