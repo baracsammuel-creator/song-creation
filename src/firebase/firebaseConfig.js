@@ -60,39 +60,6 @@ export const getEventsCollectionPath = () => {
 // Obține referința la colecția de evenimente (doar dacă DB e inițializat)
 export const eventsCollectionRef = dbInitialized ? collection(db, getEventsCollectionPath()) : null;
 
-
-/**
- * Funcția de inițializare a autentificării și a utilizatorului.
- * @returns {Promise<string>} Promisiune care rezolvă cu ID-ul utilizatorului autentificat.
- */
-export const initializeAuth = async () => {
-  if (!dbInitialized) {
-    console.warn("Autentificarea a fost omisă deoarece configurarea Firebase lipsește.");
-    return Promise.resolve(null);
-  }
-
-  return new Promise((resolve, reject) => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      unsubscribe(); // Ne dezabonăm imediat pentru a rula o singură dată la inițializare
-
-      if (user) {
-        console.log("Utilizator existent găsit din sesiune persistată:", user.uid);
-        resolve(user.uid);
-      } else {
-        try {
-          // Ne autentificăm anonim dacă nu există utilizator
-          await signInAnonymously(auth);
-          console.log("Autentificare nouă reușită. User ID:", auth.currentUser.uid);
-          resolve(auth.currentUser.uid);
-        } catch (error) {
-          console.error("Eroare la inițializarea autentificării Firebase:", error);
-          reject(error);
-        }
-      }
-    }, reject); // Adăugăm un handler pentru erori la onAuthStateChanged
-  });
-};
-
 /**
  * Ascultă schimbările stării de autentificare.
  * @param {(user: import('firebase/auth').User | null) => void} callback 
